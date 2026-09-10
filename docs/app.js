@@ -31,7 +31,7 @@ function controls() {
   $('onboard').disabled = !ready || !mouse.info;
   document.querySelectorAll('[data-dpi]').forEach(button => { button.disabled = !ready || !mouse.supported.includes(Number(button.dataset.dpi)); });
   $('profile').disabled = !ready || !mouse.profiles.length;
-  for (const id of ['save', 'backup', 'restore']) $(id).disabled = !ready || !selected;
+  for (const id of ['save', 'backup', 'reload', 'restore']) $(id).disabled = !ready || !selected;
   document.querySelectorAll('#slots input').forEach(input => { input.disabled = !ready || !selected; });
   $('start').disabled = busy;
 }
@@ -150,13 +150,31 @@ async function saveValues(values) {
   try { await mouse.onboard(selected.sector); }
   catch (error) { throw new Error(`档位已保存且回读一致，但激活配置失败：${error.message}`); }
   renderProfiles();
-  $('save-state').textContent = mouse.demo ? '已保存演示配置' : '已保存 · 回读一致';
-  status(mouse.demo ? '演示配置已保存，未写入真实鼠标。' : '板载档位已写入并验证。请断电重连，再确认 DPI 档位是否保留。', 'success');
+  $('save-state').textContent = mouse.demo ? '已保存演示配置' : wrote ? '已保存 · 回读一致' : '档位未变化 · 未写入';
+  status(mouse.demo ? '演示配置已保存，未写入真实鼠标。' : wrote ? '板载档位已写入并验证。请断电重连，再确认 DPI 档位是否保留。' : '板载档位与鼠标一致，无需写入。', 'success');
 }
-$('save').addEventListener('click', () => run(() => saveValues(formValues())));
+$('save').addEventListener('click', () => run(() => {
+  const values = formValues();
+  log(`保存配置 ${selected.sector}: ${JSON.stringify(values)}`);
+  return saveValues(values);
+}));
+$('reload').addEventListener('click', () => run(async () => {
+  log(`重新读取配置 ${selected.sector}（只读）`);
+  if (!mouse.demo) {
+    const raw = await mouse.readSector(selected.sector);
+    Object.assign(selected, { raw, ...decodeProfile(raw) });
+    mouse.currentDpi = await mouse.getDpi();
+  }
+  renderProfiles();
+  $('save-state').textContent = '已从鼠标重新读取';
+  status(`配置 ${selected.sector} 已重新读取：${selected.dpi.join(' / ')} DPI。未写入设备。`, 'success');
+}));
 $('restore').addEventListener('click', () => run(async () => {
   const original = mouse.backups.get(selected.sector);
-  await saveValues(decodeProfile(original));
+  const values = decodeProfile(original);
+  if (!window.confirm(`将配置 ${selected.sector} 恢复为本次连接时的档位：${values.dpi.join(' / ')} DPI？这会重新写入鼠标。`)) return;
+  log(`恢复原始配置 ${selected.sector}: ${JSON.stringify(values)}`);
+  await saveValues(values);
 }));
 $('backup').addEventListener('click', () => {
   const backup = { version: 1, identity: mouse.identity, info: mouse.info, profiles: Array.from(mouse.backups, ([sector, bytes]) => ({ sector, bytes: Array.from(bytes) })) };
