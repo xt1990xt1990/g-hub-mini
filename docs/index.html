@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#147c66">
+  <title>G502 X Mini</title>
+  <link rel="icon" href="./assets/mouse.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <header>
+    <div class="brand"><img src="./assets/mouse.svg" alt="" width="28" height="28"><div><h1>G502 X <span>Mini</span></h1><span class="byline">DPI · 板载配置</span></div></div>
+    <div class="connection"><span id="connection-state" class="badge">未连接</span><button id="connect" class="primary"><img src="./assets/plug.svg" alt="">连接鼠标</button><button id="demo">演示</button></div>
+  </header>
+  <main>
+    <div id="status" role="status" aria-live="polite">等待连接</div>
+    <div class="workspace">
+      <div class="settings">
+        <section>
+          <div class="section-heading"><h2>即时 DPI</h2><span id="mode" class="subtle">—</span></div>
+          <form id="dpi-form">
+            <label for="dpi">DPI 数值</label>
+            <div class="dpi-entry"><input id="dpi" type="number" inputmode="numeric" min="100" max="25600" step="50" value="800" required disabled><button id="apply" type="submit" class="primary" disabled><img src="./assets/play.svg" alt="">试用</button></div>
+          </form>
+          <div class="presets" aria-label="DPI 预设"><button data-dpi="400" disabled>400</button><button data-dpi="800" disabled>800</button><button data-dpi="1600" disabled>1600</button><button data-dpi="3200" disabled>3200</button></div>
+          <div class="dpi-footer"><span id="current-dpi" class="subtle">当前 DPI：—</span><button id="onboard" class="text-button" disabled><img src="./assets/rotate-ccw.svg" alt="">恢复板载</button></div>
+        </section>
+        <section>
+          <div class="section-heading"><h2>板载档位</h2><select id="profile" aria-label="板载配置" disabled><option>未读取</option></select></div>
+          <table class="profiles"><thead><tr><th>档位</th><th>DPI</th><th>默认</th><th>狙击</th></tr></thead><tbody id="slots"></tbody></table>
+          <div class="toolbar"><button id="save" class="primary" disabled><img src="./assets/save.svg" alt="">保存到鼠标</button><button id="backup" class="icon-button" title="下载原始配置备份" aria-label="下载原始配置备份" disabled><img src="./assets/download.svg" alt=""></button><button id="restore" class="icon-button" title="恢复此连接的原始档位" aria-label="恢复此连接的原始档位" disabled><img src="./assets/rotate-ccw.svg" alt=""></button><span id="save-state" class="subtle">未读取</span></div>
+        </section>
+      </div>
+      <section class="practice">
+        <div class="section-heading"><h2>手感测试</h2><button id="start"><img src="./assets/crosshair.svg" alt="">开始测试</button></div>
+        <div class="stats"><div><span>剩余时间</span><strong id="time">20.0 <small>s</small></strong></div><div><span>命中</span><strong id="hits">0</strong></div><div><span>准确率</span><strong id="accuracy">—</strong></div><div><span>平均间隔</span><strong id="reaction">—</strong></div></div>
+        <div class="arena" id="arena"><canvas id="field" aria-label="鼠标点击靶场"></canvas><span id="arena-state">等待开始</span></div>
+        <div class="session-heading"><h3>本次记录</h3><button id="clear" class="icon-button" title="清空测试记录" aria-label="清空测试记录"><img src="./assets/trash-2.svg" alt=""></button></div>
+        <div class="history-wrap"><table class="history"><thead><tr><th>DPI</th><th>命中</th><th>准确率</th><th>平均间隔</th></tr></thead><tbody id="history"><tr><td colspan="4" class="empty">暂无记录</td></tr></tbody></table></div>
+      </section>
+    </div>
+    <details class="diagnostics"><summary>设备与通信日志</summary><pre id="device-info">未连接设备</pre><div class="log-heading"><span>HID++</span><button id="download-log" class="icon-button" title="下载通信日志" aria-label="下载通信日志"><img src="./assets/download.svg" alt=""></button></div><pre id="log"></pre></details>
+  </main>
+  <footer><span>G502 X Mini · 非官方工具</span><a href="https://github.com/xt1990xt1990/g-hub-mini" target="_blank" rel="noreferrer">GitHub</a></footer>
+</body>
+</html>
