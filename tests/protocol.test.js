@@ -2,24 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hidpp, Mouse, crc16, decodeProfile, patchProfile, parseDpiList } from '../docs/protocol.js';
 
-function sector(dpi = [400, 800, 1600, 3200, 6400]) {
-  const bytes = Uint8Array.from({ length: 256 }, (_, i) => (i * 31) & 255);
+function sector(dpi = [400, 800, 1600, 3200, 6400], size = 256) {
+  const bytes = Uint8Array.from({ length: size }, (_, i) => (i * 31) & 255);
   bytes[0] = 1; bytes[1] = 1; bytes[2] = 0;
   const view = new DataView(bytes.buffer);
   dpi.forEach((n, i) => view.setUint16(3 + 2 * i, n, true));
-  view.setUint16(254, crc16(bytes.subarray(0, 254)));
+  view.setUint16(size - 2, crc16(bytes.subarray(0, size - 2)));
   return bytes;
 }
 
 // Simulates the HID wire boundary, not the public Mouse methods.
 class FakeDevice extends EventTarget {
-  constructor() {
+  constructor(size = 256) {
     super();
     this.opened = true;
-    this.profile = sector();
-    this.directory = new Uint8Array(256).fill(255);
+    this.size = size;
+    this.profile = sector(undefined, size);
+    this.directory = new Uint8Array(size).fill(255);
     this.directory.set([0, 1, 1, 0, 255, 255, 0, 0]);
-    new DataView(this.directory.buffer).setUint16(254, crc16(this.directory.subarray(0, 254)));
+    new DataView(this.directory.buffer).setUint16(size - 2, crc16(this.directory.subarray(0, size - 2)));
     this.dpi = 800;
     this.mode = 1;
     this.calls = [];
@@ -44,7 +45,7 @@ class FakeDevice extends EventTarget {
     else if (feature === 3 && fn === 2) output.setUint16(1, this.dpi);
     else if (feature === 3 && fn === 3) this.dpi = input.getUint16(1);
     else if (feature === 4) {
-      if (fn === 0) out.set([1, 5, 1, 1, 1, 13, 6, 1, 0]);
+      if (fn === 0) out.set([1, this.size === 255 ? 3 : 5, 1, 1, 1, 13, 6, this.size >> 8, this.size & 255]);
       else if (fn === 1) this.mode = payload[0];
       else if (fn === 2) out[0] = this.mode;
       else if (fn === 3) this.dpi = decodeProfile(this.profile).dpi[this.profile[1]];
@@ -52,17 +53,18 @@ class FakeDevice extends EventTarget {
       else if (fn === 5) {
         const source = input.getUint16(0) === 0 ? this.directory : this.profile;
         const offset = input.getUint16(2);
+        assert.ok(offset <= this.size - 16, 'firmware rejects reads beyond the final complete 16-byte block');
         out.set(source.subarray(offset, offset + 16));
         if (this.corruptRead && this.committed && offset === 0) out[3] ^= 1;
       } else if (fn === 6) {
         assert.equal(input.getUint16(0), 1);
         assert.equal(input.getUint16(2), 0);
-        assert.equal(input.getUint16(4), 256);
-        this.staging = new Uint8Array(256); this.offset = 0;
+        assert.equal(input.getUint16(4), this.size);
+        this.staging = new Uint8Array(this.size); this.offset = 0;
       } else if (fn === 7) {
-        this.staging.set(payload, this.offset); this.offset += 16;
+        this.staging.set(payload.subarray(0, Math.min(16, this.size - this.offset)), this.offset); this.offset += 16;
       } else if (fn === 8) {
-        assert.equal(this.offset, 256); this.profile = this.staging; this.committed = true;
+        assert.equal(this.offset, Math.ceil(this.size / 16) * 16); this.profile = this.staging; this.committed = true;
       }
     }
     if (this.errorFn === fn && feature === 4) reply.set([device, 0xff, feature, address, 3]);
@@ -78,8 +80,8 @@ class FakeDevice extends EventTarget {
   }
 }
 
-async function fixture(t) {
-  const device = new FakeDevice();
+async function fixture(t, size = 256) {
+  const device = new FakeDevice(size);
   const hid = new Hidpp(device, 1, () => {}, 40);
   t.after(() => hid.dispose());
   const mouse = new Mouse(hid, 'G502 X PLUS');
@@ -88,6 +90,25 @@ async function fixture(t) {
   return { mouse, hid, device };
 }
 const changes = { dpi: [400, 1000, 1800, 0, 0], defaultIndex: 1, shiftIndex: 0 };
+
+test('255-byte format 3 reads overlapping tail and writes declared length with valid CRC', async t => {
+  const { mouse, device } = await fixture(t, 255);
+  assert.equal(mouse.info.size, 255);
+  assert.equal(mouse.info.format, 3);
+  assert.deepEqual(mouse.profiles[0].dpi, [400, 800, 1600, 3200, 6400]);
+  const original = device.profile.slice();
+  const reads = device.calls.filter(c => c.feature === 4 && c.fn === 5);
+  assert.equal(new DataView(reads.at(-1).payload.buffer).getUint16(2), 239);
+  let backup;
+  await mouse.writeProfile(mouse.profiles[0], changes, async value => { backup = value; });
+  assert.equal(backup.bytes.length, 255);
+  assert.equal(device.profile.length, 255);
+  assert.deepEqual(decodeProfile(device.profile), changes);
+  assert.deepEqual(device.profile.subarray(13, 253), original.subarray(13, 253));
+  const writes = device.calls.filter(c => c.feature === 4 && c.fn === 7);
+  assert.equal(writes.length, 16);
+  assert.equal(writes.at(-1).payload[15], 0);
+});
 
 test('CRC known vector; changing DPI preserves all other profile bytes', () => {
   assert.equal(crc16(new TextEncoder().encode('123456789')), 0x29b1);

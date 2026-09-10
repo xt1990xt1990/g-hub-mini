@@ -170,7 +170,7 @@ export class Mouse {
       this.mode = (await this.hid.call(0x8100, 2))[0];
       this.initialMode = this.mode;
       this.initialProfile = view(await this.hid.call(0x8100, 4)).getUint16(0);
-      if (this.info.memory !== 1 || ![1, 2, 3, 5].includes(this.info.format) || this.info.size !== 256) {
+      if (this.info.memory !== 1 || ![1, 2, 3, 5].includes(this.info.format) || ![255, 256].includes(this.info.size)) {
         throw new Error(`板载格式未支持：${JSON.stringify(this.info)}`);
       }
       const directory = await this.readSector(0);
@@ -209,7 +209,11 @@ export class Mouse {
   }
   async readSector(sector) {
     const bytes = new Uint8Array(this.info.size);
-    for (let offset = 0; offset < bytes.length; offset += 16) bytes.set(await this.hid.call(0x8100, 5, [...be16(sector), ...be16(offset)]), offset);
+    for (let position = 0; position < bytes.length; position += 16) {
+      // HID++ always returns 16 bytes; overlap the final read for 255-byte sectors.
+      const offset = Math.min(position, bytes.length - 16);
+      bytes.set(await this.hid.call(0x8100, 5, [...be16(sector), ...be16(offset)]), offset);
+    }
     return bytes;
   }
   async writeProfile(profile, values, backup) {
